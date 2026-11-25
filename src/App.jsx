@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Asterisk, ExternalLink, Menu, TrainFront, X } from 'lucide-react'
+import { gsap } from 'gsap'
+import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
+
+gsap.registerPlugin(ScrollToPlugin)
 
 const stations = [
   { id: 'departure', name: 'Signal Central', code: 'SC' },
@@ -62,34 +66,74 @@ function StationBoard({ index }) {
   )
 }
 
-function StationRail({ activeStation, travelling, onSelect }) {
+function TrainEngine() {
+  return (
+    <svg className="train-engine" viewBox="0 0 112 62" role="img" aria-label="Animated train">
+      <g className="train-smoke">
+        <circle cx="82" cy="12" r="4" />
+        <circle cx="91" cy="7" r="3" />
+        <circle cx="99" cy="3" r="2" />
+      </g>
+      <g className="train-body">
+        <path className="train-cabin" d="M18 16h37v31H18z" />
+        <path className="train-window" d="M26 22h20v12H26z" />
+        <path className="train-boiler" d="M51 25h36a15 15 0 0 1 15 15v7H51z" />
+        <path className="train-nose" d="M96 35h11v12H96z" />
+        <path className="train-chimney" d="M72 12h13l-2 18H74z" />
+        <path className="train-roof" d="M13 13h47v7H13z" />
+        <path className="train-cowcatcher" d="m101 43 10 10H94z" />
+        <circle className="train-light" cx="100" cy="34" r="3" />
+      </g>
+      <g className="train-wheels">
+        <circle className="train-wheel" cx="31" cy="49" r="10" />
+        <circle className="train-wheel" cx="76" cy="49" r="10" />
+        <path className="wheel-rod" d="M31 49h45" />
+      </g>
+    </svg>
+  )
+}
+
+function StationRail({ activeStation, targetStation, travelling, trainRef, progressRef, onNext }) {
+  const displayStation = targetStation ?? activeStation
   const trainPosition = `${(activeStation / (stations.length - 1)) * 100}%`
+  const isComplete = activeStation === stations.length - 1
 
   return (
-    <aside className={`station-rail ${travelling ? 'is-travelling' : 'is-stopped'}`} aria-label="Journey stations">
-      <div className="rail-route">
-        <div className="rail-track" />
-        <div className="rail-progress" style={{ '--route-progress': trainPosition }} />
+    <aside className={`journey-dock ${travelling ? 'is-travelling' : 'is-stopped'}`} aria-label="Journey by train">
+      <div className="dock-status" aria-live="polite">
+        <span>{travelling ? 'EN ROUTE TO' : isComplete ? 'FINAL STATION' : 'NOW STOPPED AT'}</span>
+        <b>{stations[displayStation].name}</b>
+        <i>{String(displayStation + 1).padStart(2, '0')} / {String(stations.length).padStart(2, '0')}</i>
+      </div>
+
+      <div className="dock-route">
+        <div className="dock-track"><i /><i /></div>
+        <div ref={progressRef} className="dock-progress" style={{ width: trainPosition }} />
         {stations.map((station, index) => {
           const stopPosition = `${(index / (stations.length - 1)) * 100}%`
           return (
-            <button
+            <div
               key={station.id}
-              className={`rail-stop ${index === activeStation ? 'is-active' : ''} ${index < activeStation ? 'is-passed' : ''}`}
+              className={`dock-stop ${index === activeStation ? 'is-active' : ''} ${index < activeStation ? 'is-passed' : ''} ${index === targetStation ? 'is-target' : ''}`}
               style={{ '--stop-position': stopPosition }}
-              onClick={() => onSelect(station.id)}
-              aria-label={`Go to ${station.name}`}
+              aria-label={`Station ${index + 1}: ${station.name}`}
             >
               <i />
-              <span>{station.name}</span>
-            </button>
+              <span>{station.code}</span>
+            </div>
           )
         })}
-        <div className="rail-train" style={{ '--train-position': trainPosition }} aria-hidden="true">
-          <TrainFront />
-          <span>{travelling ? 'EN ROUTE' : 'STOPPED'}</span>
+        <div ref={trainRef} className="dock-train" style={{ left: trainPosition }}>
+          <span className="train-state">{travelling ? 'EXPRESS' : 'STOPPED'}</span>
+          <TrainEngine />
         </div>
       </div>
+
+      <button className="dock-next" onClick={onNext} disabled={travelling || isComplete}>
+        <span>{travelling ? 'Travelling…' : isComplete ? 'Journey complete' : 'Next station'}</span>
+        {!isComplete && <b>{stations[Math.min(activeStation + 1, stations.length - 1)].name}</b>}
+        <TrainFront />
+      </button>
     </aside>
   )
 }
@@ -100,11 +144,15 @@ function App() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 900)
   const [journeyStarted, setJourneyStarted] = useState(() => new URLSearchParams(window.location.search).has('autostart'))
   const [activeStation, setActiveStation] = useState(0)
+  const [targetStation, setTargetStation] = useState(null)
   const [travelling, setTravelling] = useState(false)
   const [cursor, setCursor] = useState({ x: -100, y: -100 })
   const [scrolled, setScrolled] = useState(false)
   const pageRef = useRef(null)
-  const stopTimerRef = useRef(null)
+  const trainRef = useRef(null)
+  const progressRef = useRef(null)
+  const tripTimelineRef = useRef(null)
+  const travellingRef = useRef(false)
 
   useEffect(() => {
     const onMove = (event) => setCursor({ x: event.clientX, y: event.clientY })
@@ -134,14 +182,12 @@ function App() {
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
         if (visible) {
           const nextStation = Number(visible.target.dataset.station)
-          setActiveStation((currentStation) => {
-            if (currentStation !== nextStation) {
-              setTravelling(true)
-              window.clearTimeout(stopTimerRef.current)
-              stopTimerRef.current = window.setTimeout(() => setTravelling(false), 1050)
-            }
-            return nextStation
-          })
+          if (!travellingRef.current) {
+            const position = `${(nextStation / (stations.length - 1)) * 100}%`
+            setActiveStation(nextStation)
+            gsap.to(trainRef.current, { left: position, duration: .45, ease: 'power2.out', overwrite: true })
+            gsap.to(progressRef.current, { width: position, duration: .45, ease: 'power2.out', overwrite: true })
+          }
         }
       },
       { threshold: [0.3, 0.5, 0.7], rootMargin: '-12% 0px -12% 0px' },
@@ -150,8 +196,43 @@ function App() {
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => () => tripTimelineRef.current?.kill(), [])
+
+  const travelToStation = (stationIndex) => {
+    if (!journeyStarted || travellingRef.current || stationIndex === activeStation) return
+
+    const destination = document.getElementById(stations[stationIndex].id)
+    if (!destination) return
+
+    const position = `${(stationIndex / (stations.length - 1)) * 100}%`
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const duration = reducedMotion ? .01 : 1.8
+
+    travellingRef.current = true
+    setTravelling(true)
+    setTargetStation(stationIndex)
+    setMenuOpen(false)
+    tripTimelineRef.current?.kill()
+
+    tripTimelineRef.current = gsap.timeline({
+      defaults: { duration, ease: 'power3.inOut' },
+      onComplete: () => {
+        setActiveStation(stationIndex)
+        setTargetStation(null)
+        setTravelling(false)
+        travellingRef.current = false
+      },
+    })
+      .to(window, { scrollTo: { y: destination, offsetY: 62, autoKill: false } }, 0)
+      .to(trainRef.current, { left: position }, 0)
+      .to(progressRef.current, { width: position }, 0)
+      .fromTo('.train-smoke circle', { opacity: 0, scale: .35 }, { opacity: 1, scale: 1.5, stagger: .12, duration: .35, repeat: 3, yoyo: true, ease: 'sine.inOut' }, 0)
+  }
+
   const jumpTo = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+    const stationIndex = stations.findIndex((station) => station.id === id)
+    if (stationIndex >= 0 && journeyStarted) travelToStation(stationIndex)
+    else document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
     setMenuOpen(false)
   }
 
@@ -159,6 +240,8 @@ function App() {
     setJourneyStarted(true)
     window.setTimeout(() => document.getElementById('departure')?.scrollIntoView({ behavior: 'smooth' }), 500)
   }
+
+  const travelNext = () => travelToStation(Math.min(activeStation + 1, stations.length - 1))
 
   return (
     <div className="site-shell" ref={pageRef}>
@@ -180,21 +263,14 @@ function App() {
       </div>
 
       {journeyStarted && (
-        <>
-          <StationRail activeStation={activeStation} travelling={travelling} onSelect={jumpTo} />
-          <div className={`arrival-panel ${travelling ? 'is-moving' : ''}`} aria-live="polite">
-            <span>{travelling ? 'NEXT STOP' : 'NOW AT'}</span>
-            <b>{stations[activeStation].name}</b>
-            <i>{String(activeStation + 1).padStart(2, '0')} / {String(stations.length).padStart(2, '0')}</i>
-            <button
-              onClick={() => jumpTo(stations[Math.min(activeStation + 1, stations.length - 1)].id)}
-              disabled={activeStation === stations.length - 1}
-            >
-              {activeStation === stations.length - 1 ? 'Journey complete' : `Ride to ${stations[activeStation + 1].name}`}
-              <TrainFront />
-            </button>
-          </div>
-        </>
+        <StationRail
+          activeStation={activeStation}
+          targetStation={targetStation}
+          travelling={travelling}
+          trainRef={trainRef}
+          progressRef={progressRef}
+          onNext={travelNext}
+        />
       )}
 
       <header className={scrolled ? 'topbar topbar--scrolled' : 'topbar'}>
