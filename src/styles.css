@@ -28,9 +28,43 @@ body {
   background: var(--paper);
 }
 
+html.journey-locked,
 body.journey-locked {
   overflow: hidden;
+  height: 100%;
 }
+
+body.journey-locked #root,
+body.journey-locked .site-shell {
+  height: 100%;
+  overflow: hidden;
+}
+
+.journey-stage {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+}
+
+.journey-stage .station-section {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 10rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-align: none;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.journey-stage .station-section::-webkit-scrollbar { width: 8px; }
+.journey-stage .station-section::-webkit-scrollbar-track { background: transparent; }
+.journey-stage .station-section::-webkit-scrollbar-thumb { border-radius: 8px; background: rgba(127, 127, 127, .35); }
 
 button,
 a {
@@ -2104,6 +2138,143 @@ footer {
   .connect-content>p {
     line-height: 1.6;
   }
+}
+
+/* Compact station layout */
+.journey-stage .station-section { padding-bottom: 7rem; }
+
+.topbar { height: 64px; }
+.topbar--scrolled { height: 56px; }
+
+.station-board {
+  top: 74px;
+  gap: .5rem;
+  padding: .45rem .6rem;
+  box-shadow: 4px 4px 0 var(--orange);
+}
+
+.station-board i { width: 24px; height: 24px; }
+
+.hero { padding: 96px 5vw 7rem; }
+.hero h1 { margin: 3.5vh 0 4.5vh; }
+
+.manifesto { padding: 6rem 5vw 0; gap: 3.5rem; }
+.manifesto-copy { padding: 7vh 0; }
+.manifesto-detail { padding-bottom: 4rem; }
+.marquee { margin-inline: -5vw; }
+
+.method,
+.capabilities,
+.journey { padding: 6rem 5vw 7rem; }
+
+.connect { padding: 6rem 5vw 7rem; }
+
+.method-heading { margin: 3.5rem 0; }
+.method-heading h2,
+.capabilities h2,
+.journey h2,
+.connect h2 { font-size: clamp(3.2rem, 6.4vw, 6.8rem); }
+.method-console { min-height: 420px; }
+.phase { padding: 1rem 1.2rem; }
+.phase-output { padding: 1.75rem; }
+
+.capabilities-intro { margin: 3.5rem 0; }
+.capability { padding: 1.25rem .8rem; }
+
+.journey-title { margin: 3.5rem 0 5rem; }
+.journey-footnote { margin-top: 4rem; }
+
+.journey-dock {
+  height: 88px;
+  grid-template-columns: 175px minmax(320px, 1fr) 260px;
+  gap: 1rem;
+  padding: .55rem .75rem;
+}
+
+.dock-actions {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: .5rem;
+}
+
+.dock-back,
+.dock-next {
+  min-height: 58px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: .25s;
+}
+
+.dock-back {
+  display: grid;
+  place-items: center;
+  gap: .05rem;
+  padding: .4rem;
+  border: 1px solid rgba(242, 241, 233, .28);
+  background: rgba(242, 241, 233, .07);
+  color: var(--paper);
+}
+
+.dock-back svg { width: 18px; }
+
+.dock-back span {
+  font: .43rem 'DM Mono';
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.dock-back:hover:not(:disabled) {
+  border-color: var(--acid);
+  color: var(--acid);
+  transform: translateX(-2px);
+}
+
+.dock-back:disabled {
+  opacity: .28;
+  cursor: default;
+}
+
+.dock-next { padding: .6rem .8rem; }
+.dock-route { height: 62px; margin-inline: 48px; }
+.dock-train { width: 88px; height: 49px; }
+
+@media (max-width: 900px) {
+  .journey-dock {
+    height: 104px;
+    grid-template-rows: 42px 50px;
+  }
+
+  .dock-actions {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: 38px minmax(92px, 1fr);
+    gap: .35rem;
+  }
+
+  .dock-actions .dock-back,
+  .dock-actions .dock-next {
+    grid-column: auto;
+    grid-row: auto;
+    min-height: 38px;
+    padding: .35rem .5rem;
+    border-radius: 8px;
+  }
+
+  .dock-back span { display: none; }
+  .dock-route { height: 48px; }
+  .connect { padding-bottom: 7rem !important; }
+  .station-board { top: 68px; }
+  .radar { min-height: 390px; }
+  .phase { min-height: 86px; }
+  .phase-output { min-height: 290px; }
+}
+
+@media (max-width: 520px) {
+  .dock-actions { grid-template-columns: 34px minmax(78px, 1fr); }
+  .dock-actions .dock-next { gap: .25rem; }
+  .station-board { top: 68px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

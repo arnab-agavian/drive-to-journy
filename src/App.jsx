@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Asterisk, ExternalLink, Menu, TrainFront, X } from 'lucide-react'
+import { ArrowLeft, Asterisk, ExternalLink, Menu, TrainFront, X } from 'lucide-react'
 import { gsap } from 'gsap'
-import { ScrollToPlugin } from 'gsap/ScrollToPlugin'
-
-gsap.registerPlugin(ScrollToPlugin)
 
 const stations = [
   { id: 'departure', name: 'Signal Central', code: 'SC' },
@@ -55,6 +52,46 @@ const journey = [
   { year: 'NOW', title: 'The connective role', text: 'Advising ambitious teams at the point where clarity must become coordinated movement.' },
 ]
 
+const stationEntranceProfiles = [
+  { selector: '.hero-kicker, .hero h1, .hero-footer, .hero-orbit', y: 24, scale: .98, stagger: .08 },
+  { selector: '.section-index, .manifesto-copy p, .manifesto-detail, .marquee', x: 28, stagger: .09 },
+  { selector: '.section-index, .method-heading > *, .radar, .phase-list, .phase-output', y: 28, stagger: .07 },
+  { selector: '.section-index, .capabilities-intro > *, .capability', x: 34, stagger: .055 },
+  { selector: '.section-index, .journey-title, .journey-stop, .journey-footnote', y: 30, stagger: .065 },
+  { selector: '.section-index, .connect-content > *, .connect-bg, footer', y: 26, scale: .985, stagger: .08 },
+]
+
+function getStationEntrance(section, stationIndex, direction = 1) {
+  const profile = stationEntranceProfiles[stationIndex]
+  const targets = gsap.utils.toArray(section.querySelectorAll(profile.selector))
+  return {
+    targets,
+    from: {
+      autoAlpha: 0,
+      x: (profile.x ?? 0) * direction,
+      y: (profile.y ?? 0) * direction,
+      scale: profile.scale ?? 1,
+    },
+    stagger: profile.stagger,
+  }
+}
+
+function playStationEntrance(section, stationIndex, direction = 1) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const entrance = getStationEntrance(section, stationIndex, direction)
+  gsap.killTweensOf(entrance.targets)
+  return gsap.fromTo(entrance.targets, entrance.from, {
+    autoAlpha: 1,
+    x: 0,
+    y: 0,
+    scale: 1,
+    duration: reducedMotion ? .01 : .72,
+    stagger: reducedMotion ? 0 : entrance.stagger,
+    ease: 'power2.out',
+    clearProps: 'opacity,visibility,transform',
+  })
+}
+
 function StationBoard({ index }) {
   const station = stations[index]
   return (
@@ -93,7 +130,7 @@ function TrainEngine() {
   )
 }
 
-function StationRail({ activeStation, targetStation, travelling, trainRef, progressRef, onNext }) {
+function StationRail({ activeStation, targetStation, travelling, trainRef, progressRef, onPrevious, onNext }) {
   const displayStation = targetStation ?? activeStation
   const trainPosition = `${(activeStation / (stations.length - 1)) * 100}%`
   const isComplete = activeStation === stations.length - 1
@@ -129,11 +166,22 @@ function StationRail({ activeStation, targetStation, travelling, trainRef, progr
         </div>
       </div>
 
-      <button className="dock-next" onClick={onNext} disabled={travelling || isComplete}>
-        <span>{travelling ? 'Travelling…' : isComplete ? 'Journey complete' : 'Next station'}</span>
-        {!isComplete && <b>{stations[Math.min(activeStation + 1, stations.length - 1)].name}</b>}
-        <TrainFront />
-      </button>
+      <div className="dock-actions">
+        <button
+          className="dock-back"
+          onClick={onPrevious}
+          disabled={travelling || activeStation === 0}
+          aria-label={activeStation === 0 ? 'You are at the first station' : `Back to ${stations[activeStation - 1].name}`}
+        >
+          <ArrowLeft />
+          <span>Previous</span>
+        </button>
+        <button className="dock-next" onClick={onNext} disabled={travelling || isComplete}>
+          <span>{travelling ? 'Travelling…' : isComplete ? 'Journey complete' : 'Next station'}</span>
+          {!isComplete && <b>{stations[Math.min(activeStation + 1, stations.length - 1)].name}</b>}
+          <TrainFront />
+        </button>
+      </div>
     </aside>
   )
 }
@@ -147,7 +195,6 @@ function App() {
   const [targetStation, setTargetStation] = useState(null)
   const [travelling, setTravelling] = useState(false)
   const [cursor, setCursor] = useState({ x: -100, y: -100 })
-  const [scrolled, setScrolled] = useState(false)
   const pageRef = useRef(null)
   const trainRef = useRef(null)
   const progressRef = useRef(null)
@@ -156,92 +203,141 @@ function App() {
 
   useEffect(() => {
     const onMove = (event) => setCursor({ x: event.clientX, y: event.clientY })
-    const onScroll = () => setScrolled(window.scrollY > 40)
     const onResize = () => setIsMobile(window.innerWidth <= 900)
     window.addEventListener('pointermove', onMove)
-    window.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize)
     return () => {
       window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onResize)
     }
   }, [])
 
   useEffect(() => {
-    document.body.classList.toggle('journey-locked', !journeyStarted)
-    return () => document.body.classList.remove('journey-locked')
+    document.documentElement.classList.add('journey-locked')
+    document.body.classList.add('journey-locked')
+    return () => {
+      document.documentElement.classList.remove('journey-locked')
+      document.body.classList.remove('journey-locked')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!journeyStarted) return undefined
+    const sections = gsap.utils.toArray('.station-section')
+    sections.forEach((section, index) => {
+      gsap.set(section, {
+        yPercent: index === 0 ? 0 : 100,
+        autoAlpha: index === 0 ? 1 : 0,
+        pointerEvents: index === 0 ? 'auto' : 'none',
+        zIndex: index === 0 ? 2 : 1,
+      })
+    })
+    const entrance = playStationEntrance(sections[0], 0)
+    return () => {
+      entrance.kill()
+      gsap.set(sections, { clearProps: 'transform,opacity,visibility,pointerEvents,zIndex' })
+    }
   }, [journeyStarted])
 
   useEffect(() => {
-    const sections = [...document.querySelectorAll('[data-station]')]
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
-        if (visible) {
-          const nextStation = Number(visible.target.dataset.station)
-          if (!travellingRef.current) {
-            const position = `${(nextStation / (stations.length - 1)) * 100}%`
-            setActiveStation(nextStation)
-            gsap.to(trainRef.current, { left: position, duration: .45, ease: 'power2.out', overwrite: true })
-            gsap.to(progressRef.current, { width: position, duration: .45, ease: 'power2.out', overwrite: true })
-          }
-        }
-      },
-      { threshold: [0.3, 0.5, 0.7], rootMargin: '-12% 0px -12% 0px' },
-    )
-    sections.forEach((section) => observer.observe(section))
-    return () => observer.disconnect()
-  }, [])
+    if (!journeyStarted) return undefined
+    const activeSection = document.querySelector(`[data-station="${activeStation}"]`)
+    if (!activeSection) return undefined
+
+    const onWheel = (event) => {
+      if (event.target instanceof Element && event.target.closest('.journey-dock')) return
+      event.preventDefault()
+      const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? activeSection.clientHeight : 1
+      activeSection.scrollBy({ top: event.deltaY * multiplier, left: 0, behavior: 'auto' })
+    }
+
+    const onKeyDown = (event) => {
+      if (event.target instanceof Element && event.target.closest('button, a, input, textarea, select')) return
+      const distances = {
+        ArrowDown: 72,
+        ArrowUp: -72,
+        PageDown: activeSection.clientHeight * .75,
+        PageUp: activeSection.clientHeight * -.75,
+        ' ': event.shiftKey ? activeSection.clientHeight * -.75 : activeSection.clientHeight * .75,
+      }
+      if (!(event.key in distances)) return
+      event.preventDefault()
+      activeSection.scrollBy({ top: distances[event.key], left: 0, behavior: 'smooth' })
+    }
+
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [activeStation, journeyStarted])
 
   useEffect(() => () => tripTimelineRef.current?.kill(), [])
 
   const travelToStation = (stationIndex) => {
     if (!journeyStarted || travellingRef.current || stationIndex === activeStation) return
 
-    const destination = document.getElementById(stations[stationIndex].id)
-    if (!destination) return
+    const currentSection = document.querySelector(`[data-station="${activeStation}"]`)
+    const destination = document.querySelector(`[data-station="${stationIndex}"]`)
+    if (!currentSection || !destination) return
 
     const position = `${(stationIndex / (stations.length - 1)) * 100}%`
+    const direction = stationIndex > activeStation ? 1 : -1
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const duration = reducedMotion ? .01 : 1.8
+    const entrance = getStationEntrance(destination, stationIndex, direction)
 
     travellingRef.current = true
     setTravelling(true)
     setTargetStation(stationIndex)
     setMenuOpen(false)
     tripTimelineRef.current?.kill()
+    destination.scrollTop = 0
+    gsap.set(destination, { yPercent: 100 * direction, autoAlpha: 1, pointerEvents: 'auto', zIndex: 3 })
+    gsap.set(currentSection, { zIndex: 2 })
+    gsap.set(entrance.targets, entrance.from)
 
     tripTimelineRef.current = gsap.timeline({
       defaults: { duration, ease: 'power3.inOut' },
       onComplete: () => {
+        gsap.set(currentSection, { autoAlpha: 0, pointerEvents: 'none', zIndex: 1 })
+        gsap.set(destination, { yPercent: 0, autoAlpha: 1, pointerEvents: 'auto', zIndex: 2 })
         setActiveStation(stationIndex)
         setTargetStation(null)
         setTravelling(false)
         travellingRef.current = false
+        gsap.set(entrance.targets, { clearProps: 'opacity,visibility,transform' })
       },
     })
-      .to(window, { scrollTo: { y: destination, offsetY: 62, autoKill: false } }, 0)
+      .to(currentSection, { yPercent: -100 * direction }, 0)
+      .to(destination, { yPercent: 0 }, 0)
       .to(trainRef.current, { left: position }, 0)
       .to(progressRef.current, { width: position }, 0)
+      .to(entrance.targets, {
+        autoAlpha: 1,
+        x: 0,
+        y: 0,
+        scale: 1,
+        duration: reducedMotion ? .01 : .72,
+        stagger: reducedMotion ? 0 : entrance.stagger,
+        ease: 'power2.out',
+      }, reducedMotion ? 0 : .82)
       .fromTo('.train-smoke circle', { opacity: 0, scale: .35 }, { opacity: 1, scale: 1.5, stagger: .12, duration: .35, repeat: 3, yoyo: true, ease: 'sine.inOut' }, 0)
   }
 
   const jumpTo = (id) => {
     const stationIndex = stations.findIndex((station) => station.id === id)
     if (stationIndex >= 0 && journeyStarted) travelToStation(stationIndex)
-    else document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
     setMenuOpen(false)
   }
 
   const startJourney = () => {
     setJourneyStarted(true)
-    window.setTimeout(() => document.getElementById('departure')?.scrollIntoView({ behavior: 'smooth' }), 500)
   }
 
   const travelNext = () => travelToStation(Math.min(activeStation + 1, stations.length - 1))
+  const travelPrevious = () => travelToStation(Math.max(activeStation - 1, 0))
 
   return (
     <div className="site-shell" ref={pageRef}>
@@ -269,12 +365,13 @@ function App() {
           travelling={travelling}
           trainRef={trainRef}
           progressRef={progressRef}
+          onPrevious={travelPrevious}
           onNext={travelNext}
         />
       )}
 
-      <header className={scrolled ? 'topbar topbar--scrolled' : 'topbar'}>
-        <button className="wordmark" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Back to top">
+      <header className={activeStation > 0 ? 'topbar topbar--scrolled' : 'topbar'}>
+        <button className="wordmark" onClick={() => travelToStation(0)} aria-label="Return to Signal Central">
           S<span>∕</span>S
         </button>
         <div className="status"><i /> {journeyStarted ? 'TRAIN EN ROUTE' : 'LINE READY'} <span>GURUGRAM · INDIA</span></div>
@@ -298,8 +395,8 @@ function App() {
         </div>
       )}
 
-      <main>
-        <section className="hero station-section" id="departure" data-station="0" aria-labelledby="hero-title">
+      <main className="journey-stage">
+        <section className="hero station-section" id="departure" data-station="0" aria-labelledby="hero-title" aria-hidden={activeStation !== 0} inert={activeStation !== 0}>
           <StationBoard index={0} />
           <div className="hero-kicker"><Asterisk /> SONIAA SPECIALIST · STRATEGY / GROWTH / LEADERSHIP</div>
           <h1 id="hero-title">
@@ -323,7 +420,7 @@ function App() {
           <div className="edge-copy">SCROLL TO DECODE · 01—05</div>
         </section>
 
-        <section className="manifesto station-section" id="manifesto" data-station="1">
+        <section className="manifesto station-section" id="manifesto" data-station="1" aria-hidden={activeStation !== 1} inert={activeStation !== 1}>
           <StationBoard index={1} />
           <div className="section-index">01 / POINT OF VIEW</div>
           <div className="manifesto-copy">
@@ -339,7 +436,7 @@ function App() {
           </div>
         </section>
 
-        <section className="method station-section" id="method" data-station="2">
+        <section className="method station-section" id="method" data-station="2" aria-hidden={activeStation !== 2} inert={activeStation !== 2}>
           <StationBoard index={2} />
           <div className="section-index light">02 / LEADERSHIP OS</div>
           <div className="method-heading">
@@ -388,7 +485,7 @@ function App() {
           </div>
         </section>
 
-        <section className="capabilities station-section" id="capabilities" data-station="3">
+        <section className="capabilities station-section" id="capabilities" data-station="3" aria-hidden={activeStation !== 3} inert={activeStation !== 3}>
           <StationBoard index={3} />
           <div className="section-index">03 / FIELD OF WORK</div>
           <div className="capabilities-intro">
@@ -407,7 +504,7 @@ function App() {
           </div>
         </section>
 
-        <section className="journey station-section" id="journey" data-station="4">
+        <section className="journey station-section" id="journey" data-station="4" aria-hidden={activeStation !== 4} inert={activeStation !== 4}>
           <StationBoard index={4} />
           <div className="section-index light">04 / THE THROUGH-LINE</div>
           <div className="journey-title">
@@ -431,7 +528,7 @@ function App() {
           <p className="journey-footnote">Across corporate, entrepreneurial and advisory roles, the through-line stays the same: see the whole system, then help people move through it.</p>
         </section>
 
-        <section className="connect station-section" id="connect" data-station="5">
+        <section className="connect station-section" id="connect" data-station="5" aria-hidden={activeStation !== 5} inert={activeStation !== 5}>
           <StationBoard index={5} />
           <div className="connect-bg" aria-hidden="true">LET’S<br />MOVE</div>
           <div className="section-index">05 / OPEN CHANNEL</div>
