@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, Asterisk, ExternalLink, Menu, X } from 'lucide-react'
+import { Asterisk, ExternalLink, Menu, TrainFront, X } from 'lucide-react'
+
+const stations = [
+  { id: 'departure', name: 'Signal Central', code: 'SC' },
+  { id: 'manifesto', name: 'Clarity Junction', code: 'CJ' },
+  { id: 'method', name: 'Motion Works', code: 'MW' },
+  { id: 'capabilities', name: 'Many Altitudes', code: 'MA' },
+  { id: 'journey', name: 'The Through-Line', code: 'TL' },
+  { id: 'connect', name: 'Open Channel', code: 'OC' },
+]
 
 const phases = [
   {
@@ -42,13 +51,60 @@ const journey = [
   { year: 'NOW', title: 'The connective role', text: 'Advising ambitious teams at the point where clarity must become coordinated movement.' },
 ]
 
+function StationBoard({ index }) {
+  const station = stations[index]
+  return (
+    <div className="station-board" aria-label={`Station ${index + 1}: ${station.name}`}>
+      <span>STATION {String(index + 1).padStart(2, '0')}</span>
+      <b>{station.name}</b>
+      <i>{station.code}</i>
+    </div>
+  )
+}
+
+function StationRail({ activeStation, travelling, onSelect }) {
+  const trainPosition = `${(activeStation / (stations.length - 1)) * 100}%`
+
+  return (
+    <aside className={`station-rail ${travelling ? 'is-travelling' : 'is-stopped'}`} aria-label="Journey stations">
+      <div className="rail-route">
+        <div className="rail-track" />
+        <div className="rail-progress" style={{ '--route-progress': trainPosition }} />
+        {stations.map((station, index) => {
+          const stopPosition = `${(index / (stations.length - 1)) * 100}%`
+          return (
+            <button
+              key={station.id}
+              className={`rail-stop ${index === activeStation ? 'is-active' : ''} ${index < activeStation ? 'is-passed' : ''}`}
+              style={{ '--stop-position': stopPosition }}
+              onClick={() => onSelect(station.id)}
+              aria-label={`Go to ${station.name}`}
+            >
+              <i />
+              <span>{station.name}</span>
+            </button>
+          )
+        })}
+        <div className="rail-train" style={{ '--train-position': trainPosition }} aria-hidden="true">
+          <TrainFront />
+          <span>{travelling ? 'EN ROUTE' : 'STOPPED'}</span>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
 function App() {
   const [activePhase, setActivePhase] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 900)
+  const [journeyStarted, setJourneyStarted] = useState(() => new URLSearchParams(window.location.search).has('autostart'))
+  const [activeStation, setActiveStation] = useState(0)
+  const [travelling, setTravelling] = useState(false)
   const [cursor, setCursor] = useState({ x: -100, y: -100 })
   const [scrolled, setScrolled] = useState(false)
   const pageRef = useRef(null)
+  const stopTimerRef = useRef(null)
 
   useEffect(() => {
     const onMove = (event) => setCursor({ x: event.clientX, y: event.clientY })
@@ -64,9 +120,44 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    document.body.classList.toggle('journey-locked', !journeyStarted)
+    return () => document.body.classList.remove('journey-locked')
+  }, [journeyStarted])
+
+  useEffect(() => {
+    const sections = [...document.querySelectorAll('[data-station]')]
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+        if (visible) {
+          const nextStation = Number(visible.target.dataset.station)
+          setActiveStation((currentStation) => {
+            if (currentStation !== nextStation) {
+              setTravelling(true)
+              window.clearTimeout(stopTimerRef.current)
+              stopTimerRef.current = window.setTimeout(() => setTravelling(false), 1050)
+            }
+            return nextStation
+          })
+        }
+      },
+      { threshold: [0.3, 0.5, 0.7], rootMargin: '-12% 0px -12% 0px' },
+    )
+    sections.forEach((section) => observer.observe(section))
+    return () => observer.disconnect()
+  }, [])
+
   const jumpTo = (id) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
     setMenuOpen(false)
+  }
+
+  const startJourney = () => {
+    setJourneyStarted(true)
+    window.setTimeout(() => document.getElementById('departure')?.scrollIntoView({ behavior: 'smooth' }), 500)
   }
 
   return (
@@ -74,11 +165,43 @@ function App() {
       <div className="cursor-glow" style={{ transform: `translate(${cursor.x}px, ${cursor.y}px)` }} />
       <div className="noise" aria-hidden="true" />
 
+      <div className={`boarding-gate ${journeyStarted ? 'has-departed' : ''}`} aria-hidden={journeyStarted}>
+        <div className="boarding-route" aria-hidden="true"><span /><span /><span /><span /><span /><span /></div>
+        <div className="boarding-mark"><TrainFront /></div>
+        <p className="boarding-overline">PLATFORM 01 · GURUGRAM · BOARDING NOW</p>
+        <h1>The Soniaa<br /><em>Line.</em></h1>
+        <p className="boarding-copy">Six stations. One widening field of view.<br />A journey through strategy, leadership and motion.</p>
+        <button className="boarding-button" onClick={startJourney} tabIndex={journeyStarted ? -1 : 0}>
+          <span>Board the train</span><TrainFront />
+        </button>
+        <div className="ticket-stub">
+          <span>ONE WAY</span><b>CLARITY → MOVEMENT</b><i>SS / 2026</i>
+        </div>
+      </div>
+
+      {journeyStarted && (
+        <>
+          <StationRail activeStation={activeStation} travelling={travelling} onSelect={jumpTo} />
+          <div className={`arrival-panel ${travelling ? 'is-moving' : ''}`} aria-live="polite">
+            <span>{travelling ? 'NEXT STOP' : 'NOW AT'}</span>
+            <b>{stations[activeStation].name}</b>
+            <i>{String(activeStation + 1).padStart(2, '0')} / {String(stations.length).padStart(2, '0')}</i>
+            <button
+              onClick={() => jumpTo(stations[Math.min(activeStation + 1, stations.length - 1)].id)}
+              disabled={activeStation === stations.length - 1}
+            >
+              {activeStation === stations.length - 1 ? 'Journey complete' : `Ride to ${stations[activeStation + 1].name}`}
+              <TrainFront />
+            </button>
+          </div>
+        </>
+      )}
+
       <header className={scrolled ? 'topbar topbar--scrolled' : 'topbar'}>
         <button className="wordmark" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Back to top">
           S<span>∕</span>S
         </button>
-        <div className="status"><i /> SIGNAL ONLINE <span>GURUGRAM · INDIA</span></div>
+        <div className="status"><i /> {journeyStarted ? 'TRAIN EN ROUTE' : 'LINE READY'} <span>GURUGRAM · INDIA</span></div>
         <nav aria-label="Primary navigation">
           <button onClick={() => jumpTo('method')}>Method</button>
           <button onClick={() => jumpTo('journey')}>Journey</button>
@@ -100,7 +223,8 @@ function App() {
       )}
 
       <main>
-        <section className="hero" aria-labelledby="hero-title">
+        <section className="hero station-section" id="departure" data-station="0" aria-labelledby="hero-title">
+          <StationBoard index={0} />
           <div className="hero-kicker"><Asterisk /> SONIAA SPECIALIST · STRATEGY / GROWTH / LEADERSHIP</div>
           <h1 id="hero-title">
             I notice what<br />
@@ -117,13 +241,14 @@ function App() {
           <div className="hero-footer">
             <p>Not a title. Not a tidy lane.<br />A connective force between <em>what is</em> and <em>what could move.</em></p>
             <button className="discover" onClick={() => jumpTo('manifesto')}>
-              Enter the signal <ArrowDown />
+              Depart for Clarity Junction <TrainFront />
             </button>
           </div>
           <div className="edge-copy">SCROLL TO DECODE · 01—05</div>
         </section>
 
-        <section className="manifesto" id="manifesto">
+        <section className="manifesto station-section" id="manifesto" data-station="1">
+          <StationBoard index={1} />
           <div className="section-index">01 / POINT OF VIEW</div>
           <div className="manifesto-copy">
             <p>Most businesses don’t have an <span>idea problem.</span></p>
@@ -138,7 +263,8 @@ function App() {
           </div>
         </section>
 
-        <section className="method" id="method">
+        <section className="method station-section" id="method" data-station="2">
+          <StationBoard index={2} />
           <div className="section-index light">02 / LEADERSHIP OS</div>
           <div className="method-heading">
             <h2>From signal<br />to <i>movement.</i></h2>
@@ -186,7 +312,8 @@ function App() {
           </div>
         </section>
 
-        <section className="capabilities" id="capabilities">
+        <section className="capabilities station-section" id="capabilities" data-station="3">
+          <StationBoard index={3} />
           <div className="section-index">03 / FIELD OF WORK</div>
           <div className="capabilities-intro">
             <h2>One mind.<br /><span>Many altitudes.</span></h2>
@@ -204,7 +331,8 @@ function App() {
           </div>
         </section>
 
-        <section className="journey" id="journey">
+        <section className="journey station-section" id="journey" data-station="4">
+          <StationBoard index={4} />
           <div className="section-index light">04 / THE THROUGH-LINE</div>
           <div className="journey-title">
             <span>Not a ladder.</span>
@@ -227,7 +355,8 @@ function App() {
           <p className="journey-footnote">Across corporate, entrepreneurial and advisory roles, the through-line stays the same: see the whole system, then help people move through it.</p>
         </section>
 
-        <section className="connect" id="connect">
+        <section className="connect station-section" id="connect" data-station="5">
+          <StationBoard index={5} />
           <div className="connect-bg" aria-hidden="true">LET’S<br />MOVE</div>
           <div className="section-index">05 / OPEN CHANNEL</div>
           <div className="connect-content">
