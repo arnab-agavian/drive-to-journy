@@ -10,11 +10,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.15.0",
     "@vitejs/plugin-react": "latest",
     "gsap": "^3.15.1",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "react-redux": "^9.3.1",
     "vite": "latest"
   },
   "devDependencies": {

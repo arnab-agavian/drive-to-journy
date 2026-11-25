@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowRight, RadioTower } from 'lucide-react'
 import StationBoard from './StationBoard'
 
 const phases = [
@@ -27,17 +28,22 @@ const phases = [
 
 export default function MethodStation({ isActive }) {
   const [activePhase, setActivePhase] = useState(0)
+  const nextPhase = () => setActivePhase((current) => (current + 1) % phases.length)
 
   return (
     <section className="method station-section" id="method" data-station="2" aria-hidden={!isActive} inert={!isActive}>
       <StationBoard index={2} />
-      <div className="section-index light">02 / LEADERSHIP OS</div>
+      <div className="method-topline">
+        <div className="section-index light">02 / LEADERSHIP OS</div>
+        <div className="method-live"><RadioTower /> OPERATING SYSTEM ONLINE</div>
+      </div>
       <div className="method-heading">
         <h2>From signal<br />to <i>movement.</i></h2>
         <p>A three-part operating instinct. Select a signal to see how strategy becomes action.</p>
       </div>
 
       <div className="method-console">
+        <div className="method-console-grid" aria-hidden="true" />
         <div className="radar" style={{ '--phase': activePhase }}>
           <div className="radar-sweep" />
           <div className="radar-ring r1" />
@@ -48,6 +54,8 @@ export default function MethodStation({ isActive }) {
               key={phase.code}
               className={`radar-node n${index + 1} ${activePhase === index ? 'is-active' : ''}`}
               onClick={() => setActivePhase(index)}
+                  onPointerEnter={() => setActivePhase(index)}
+                  onFocus={() => setActivePhase(index)}
               aria-label={`Select ${phase.label}`}
             >
               {phase.code}
@@ -62,6 +70,9 @@ export default function MethodStation({ isActive }) {
               key={phase.code}
               className={activePhase === index ? 'phase is-active' : 'phase'}
               onClick={() => setActivePhase(index)}
+              onPointerEnter={() => setActivePhase(index)}
+              onFocus={() => setActivePhase(index)}
+              aria-pressed={activePhase === index}
             >
               <span>{phase.code}</span>
               <b>{phase.label}</b>
@@ -74,6 +85,12 @@ export default function MethodStation({ isActive }) {
           <span>ACTIVE SIGNAL / {phases[activePhase].code}</span>
           <h3>{phases[activePhase].title}</h3>
           <p>{phases[activePhase].copy}</p>
+          <div className="phase-meter" aria-hidden="true">
+            {phases.map((phase, index) => <i key={phase.code} className={index <= activePhase ? 'is-on' : ''} />)}
+          </div>
+          <button className="method-next" onClick={nextPhase}>
+            Run next signal <ArrowRight />
+          </button>
         </div>
       </div>
     </section>

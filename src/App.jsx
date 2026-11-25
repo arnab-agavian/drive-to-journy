@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import { gsap } from 'gsap'
+import { useDispatch } from 'react-redux'
 import BoardingGate from './components/BoardingGate'
 import StationRail from './components/StationRail'
 import CapabilitiesStation from './components/stations/CapabilitiesStation'
@@ -10,6 +11,8 @@ import JourneyStation from './components/stations/JourneyStation'
 import ManifestoStation from './components/stations/ManifestoStation'
 import MethodStation from './components/stations/MethodStation'
 import { stations } from './components/stations/stationData'
+import { recordUserActivity } from './features/activity/activitySlice'
+import { getVisitorLocation } from './utils/visitorLocation'
 
 const stationEntranceProfiles = [
   { selector: '.hero-kicker, .hero h1, .hero-footer, .hero-orbit', y: 24, scale: .98, stagger: .08 },
@@ -52,6 +55,7 @@ function playStationEntrance(section, stationIndex, direction = 1) {
 }
 
 function App() {
+  const dispatch = useDispatch()
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 900)
   const [journeyStarted, setJourneyStarted] = useState(() => new URLSearchParams(window.location.search).has('autostart'))
@@ -64,6 +68,31 @@ function App() {
   const progressRef = useRef(null)
   const tripTimelineRef = useRef(null)
   const travellingRef = useRef(false)
+
+  const trackActivity = useCallback(async (activity, eventKey) => {
+    const location = await getVisitorLocation()
+    dispatch(recordUserActivity({ activity, eventKey, location }))
+  }, [dispatch])
+
+  useEffect(() => {
+    trackActivity('journey.landing.viewed', 'journey:landing')
+  }, [trackActivity])
+
+  useEffect(() => {
+    if (!journeyStarted) return
+    trackActivity('journey.started', 'journey:started')
+  }, [journeyStarted, trackActivity])
+
+  useEffect(() => {
+    if (!journeyStarted) return
+
+    const station = stations[activeStation]
+    trackActivity(`journey.station.${station.id}.viewed`, `journey:station:${station.id}`)
+
+    if (activeStation === stations.length - 1) {
+      trackActivity('journey.completed', 'journey:completed')
+    }
+  }, [activeStation, journeyStarted, trackActivity])
 
   useEffect(() => {
     const onMove = (event) => setCursor({ x: event.clientX, y: event.clientY })
@@ -219,6 +248,7 @@ function App() {
           progressRef={progressRef}
           onPrevious={travelPrevious}
           onNext={travelNext}
+          onSelectStation={travelToStation}
         />
       )}
 
